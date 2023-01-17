@@ -39,7 +39,7 @@ delete(string $uri, array $options = []): Symfony\Contracts\HttpClient\ResponseI
 ### GET
 
 ```php
-$response = $api->get('/cgi-bin/user/list'， [
+$response = $api->get('/cgi-bin/user/list', [
     'next_openid' => 'OPENID1',
 ]);
 ```
@@ -148,6 +148,15 @@ $media = $client->withFile($path, 'media')->post('cgi-bin/media/upload?type=imag
 $media = $client->withFileContents($contents, 'media', 'filename.png')->post('cgi-bin/media/upload?type=image');
 ```
 
+## 自定义 access_token
+
+```php
+$client->withAccessToken('access_token');
+$client->get('xxxx');
+$client->post('xxxx');
+//...
+```
+
 ## 预置参数的传递 <version-tag>6.4.0+</version-tag>
 
 在调用 API 的时候难免有的需要传递账号的一些信息，尤其是支付相关的 API，例如[查询订单](https://pay.weixin.qq.com/wiki/doc/apiv3/apis/chapter3_1_2.shtml)：
@@ -161,28 +170,30 @@ $client->get('v3/pay/transactions/id/1217752501201407033233368018', [
 不得不把商户号这种基础信息再读取传递一遍，比较麻烦，设计了如下的简化方案：
 
 ```php
-$client->withMchid()->get('v3/pay/transactions/id/1217752501201407033233368018');
+$client->withMchId()->get('v3/pay/transactions/id/1217752501201407033233368018');
 ```
 
 原理就是 `with` + `配置 key`：
 
+> 注意: 如果配置key含有下划线的，如 `app_id` 应该转换为大写 `withAppId`
+
 ```php
-$client->withAppid()->post('/path/to/resources', [...]);
-$client->withAppid()->withMchid()->post('/path/to/resources', [...]);
+$client->withAppId()->post('/path/to/resources', [...]);
+$client->withAppId()->withMchid()->post('/path/to/resources', [...]);
 ```
 
 也可以自定义值：
 
 ```php
-$client->withAppid('12345678')->post('/path/to/resources', [...]);
-// or 
+$client->withAppId('12345678')->post('/path/to/resources', [...]);
+// or
 $client->with('appid', '123456')->post('/path/to/resources', [...]);
 ```
 
 还可以设置别名：把 `appid` 作为参数 `mch_appid` 值使用：
 
 ```php
-$client->withAppidAs('mch_appid')->post('/path/to/resources', [...]);
+$client->withAppIdAs('mch_appid')->post('/path/to/resources', [...]);
 ```
 
 其它通用方法：
@@ -237,6 +248,7 @@ return $response;
 ```
 
 或者不改变默认配置的情况下，在调用请求时单独设置`throw(false)`，若该请求失败，也可以自己处理异常。
+
 ```php
 // $options 同上文，这里省略
 $response = $api->get('/cgi-bin/user/get', $options)->throw(false);
@@ -247,6 +259,7 @@ if ($response->isFailed()) {
 
 return $response;
 ```
+
 ### 数组式访问
 
 EasyWeChat 增强了 API 响应对象，比如增加了数组式访问，你可以不用每次 `toArray` 后再取值，更加便捷美观：
@@ -307,6 +320,20 @@ $response->toJson(false);
 // 将内容转换成流返回
 $response->toStream();
 $response->toStream(false); // 失败不抛出异常
+```
+
+### 转换为 PSR-7 Response <version-tag>6.6.0+</version-tag>
+
+如果你希望直接将 API 响应转换成 [PSR-7 规范](https://www.php-fig.org/psr/psr-7/) Response，可以使用 `toPsrResponse` 方法：
+
+```php
+$psrResponse = $response->toPsrResponse();
+```
+
+比如在 Laravel 中就可以这样使用：
+
+```php
+return $response->toPsrResponse();
 ```
 
 ### 保存到文件 <version-tag>6.3.0+</version-tag>

@@ -12,12 +12,14 @@ use EasyWeChat\Kernel\HttpClient\AccessTokenAwareClient;
 use EasyWeChat\Tests\TestCase;
 use EasyWeChat\Work\AccessToken;
 use EasyWeChat\Work\Account;
-use EasyWeChat\Work\Account as AccountInterface;
 use EasyWeChat\Work\Application;
+use EasyWeChat\Work\Contracts\Account as AccountInterface;
 use EasyWeChat\Work\Contracts\Application as ApplicationInterface;
 use EasyWeChat\Work\Encryptor;
 use EasyWeChat\Work\JsApiTicket;
 use EasyWeChat\Work\Server;
+use EasyWeChat\Work\Utils;
+use Overtrue\Socialite\Providers\WeWork;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\SimpleCache\CacheInterface;
 use Symfony\Component\Cache\Psr16Cache;
@@ -109,7 +111,6 @@ class ApplicationTest extends TestCase
         $this->assertSame($server, $app->getServer());
     }
 
-
     public function test_get_and_set_client()
     {
         $app = new Application(
@@ -129,7 +130,6 @@ class ApplicationTest extends TestCase
         $app->setClient($client);
         $this->assertSame($client, $app->getClient());
     }
-
 
     public function test_get_and_set_http_client()
     {
@@ -236,5 +236,53 @@ class ApplicationTest extends TestCase
         $ticket = new JsApiTicket('wx3cf0f39249000060', 'mock-token', $app->getCache(), $app->getClient());
         $app->setTicket($ticket);
         $this->assertSame($ticket, $app->getTicket());
+    }
+
+    public function test_get_utils()
+    {
+        $app = new Application(
+            [
+                'corp_id' => 'wx3cf0f39249000060',
+                'secret' => 'mock-secret',
+                'token' => 'mock-token',
+                'aes_key' => 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG',
+                'agent_id' => 100001,
+            ]
+        );
+
+        $this->assertInstanceOf(Utils::class, $app->getUtils());
+    }
+
+    public function test_get_oauth()
+    {
+        $app = new Application(
+            [
+                'corp_id' => 'wx3cf0f39249000060',
+                'secret' => 'mock-secret',
+                'token' => 'mock-token',
+                'aes_key' => 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG',
+            ]
+        );
+
+        $oauth = $app->getOauth();
+        $this->assertInstanceOf(WeWork::class, $oauth);
+        $ref = new \ReflectionProperty($oauth, 'agentId');
+        $this->assertNull($ref->getValue($oauth));
+
+        // with default agent id
+        $app = new Application(
+            [
+                'corp_id' => 'wx3cf0f39249000060',
+                'secret' => 'mock-secret',
+                'token' => 'mock-token',
+                'aes_key' => 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG',
+                'agent_id' => '100001',
+            ]
+        );
+
+        $oauth = $app->getOauth();
+        $this->assertInstanceOf(WeWork::class, $oauth);
+        $ref = new \ReflectionProperty($oauth, 'agentId');
+        $this->assertSame(100001, $ref->getValue($oauth));
     }
 }

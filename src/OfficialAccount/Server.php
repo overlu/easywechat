@@ -45,20 +45,20 @@ class Server implements ServerInterface
      */
     public function serve(): ResponseInterface
     {
-        if (!!($str = $this->request->getQueryParams()['echostr'] ?? '')) {
+        if ((bool) ($str = $this->request->getQueryParams()['echostr'] ?? '')) {
             return new Response(200, [], $str);
         }
 
         $message = $this->getRequestMessage($this->request);
         $query = $this->request->getQueryParams();
 
-        if ($this->encryptor && !empty($query['msg_signature'])) {
+        if ($this->encryptor && ! empty($query['msg_signature'])) {
             $this->prepend($this->decryptRequestMessage($query));
         }
 
         $response = $this->handle(new Response(200, [], 'success'), $message);
 
-        if (!($response instanceof ResponseInterface)) {
+        if (! ($response instanceof ResponseInterface)) {
             $response = $this->transformToReply($response, $message, $this->encryptor);
         }
 
@@ -68,8 +68,9 @@ class Server implements ServerInterface
     /**
      * @throws Throwable
      */
-    public function addMessageListener(string $type, callable $handler): static
+    public function addMessageListener(string $type, callable|string $handler): static
     {
+        $handler = $this->makeClosure($handler);
         $this->withHandler(
             function (Message $message, Closure $next) use ($type, $handler): mixed {
                 return $message->MsgType === $type ? $handler($message, $next) : $next($message);
@@ -82,8 +83,9 @@ class Server implements ServerInterface
     /**
      * @throws Throwable
      */
-    public function addEventListener(string $event, callable $handler): static
+    public function addEventListener(string $event, callable|string $handler): static
     {
+        $handler = $this->makeClosure($handler);
         $this->withHandler(
             function (Message $message, Closure $next) use ($event, $handler): mixed {
                 return $message->Event === $event ? $handler($message, $next) : $next($message);
@@ -100,7 +102,7 @@ class Server implements ServerInterface
     protected function decryptRequestMessage(array $query): Closure
     {
         return function (Message $message, Closure $next) use ($query): mixed {
-            if (!$this->encryptor) {
+            if (! $this->encryptor) {
                 return null;
             }
 
@@ -134,7 +136,7 @@ class Server implements ServerInterface
         $message = $this->getRequestMessage($request);
         $query = $request->getQueryParams();
 
-        if (!$this->encryptor || empty($query['msg_signature'])) {
+        if (! $this->encryptor || empty($query['msg_signature'])) {
             return $message;
         }
 

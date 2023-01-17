@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace EasyWeChat\Kernel\HttpClient;
 
+use function array_merge;
 use Closure;
 use EasyWeChat\Kernel\Contracts\AccessToken as AccessTokenInterface;
 use EasyWeChat\Kernel\Contracts\AccessTokenAwareHttpClient as AccessTokenAwareHttpClientInterface;
@@ -13,8 +14,13 @@ use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
-use function array_merge;
 
+/**
+ * Class AccessTokenAwareClient.
+ *
+ *
+ * @method HttpClientInterface withAppId(string $value = null)
+ */
 class AccessTokenAwareClient implements AccessTokenAwareHttpClientInterface
 {
     use AsyncDecoratorTrait;
@@ -41,6 +47,7 @@ class AccessTokenAwareClient implements AccessTokenAwareHttpClientInterface
 
     /**
      * @param  array<string, mixed>  $options
+     *
      * @throws TransportExceptionInterface
      */
     public function request(string $method, string $url, array $options = []): Response
@@ -59,10 +66,14 @@ class AccessTokenAwareClient implements AccessTokenAwareHttpClientInterface
     }
 
     /**
-     * @param  array<string, mixed>  $arguments
+     * @param  array<int, mixed>  $arguments
      */
     public function __call(string $name, array $arguments): mixed
     {
+        if (\str_starts_with($name, 'with')) {
+            return $this->handleMagicWithCall($name, $arguments[0] ?? null);
+        }
+
         return $this->client->$name(...$arguments);
     }
 

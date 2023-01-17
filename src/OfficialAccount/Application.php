@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace EasyWeChat\OfficialAccount;
 
+use function array_merge;
+use function call_user_func;
 use EasyWeChat\Kernel\Contracts\AccessToken as AccessTokenInterface;
+use EasyWeChat\Kernel\Contracts\RefreshableAccessToken as RefreshableAccessTokenInterface;
 use EasyWeChat\Kernel\Contracts\Server as ServerInterface;
 use EasyWeChat\Kernel\Encryptor;
 use EasyWeChat\Kernel\Exceptions\InvalidArgumentException;
@@ -24,12 +27,10 @@ use JetBrains\PhpStorm\Pure;
 use Overtrue\Socialite\Contracts\ProviderInterface as SocialiteProviderInterface;
 use Overtrue\Socialite\Providers\WeChat;
 use Psr\Log\LoggerAwareTrait;
-use Symfony\Component\HttpClient\Response\AsyncContext;
-use Symfony\Component\HttpClient\RetryableHttpClient;
-use function array_merge;
-use function call_user_func;
 use function sprintf;
 use function str_contains;
+use Symfony\Component\HttpClient\Response\AsyncContext;
+use Symfony\Component\HttpClient\RetryableHttpClient;
 
 class Application implements ApplicationInterface
 {
@@ -41,15 +42,20 @@ class Application implements ApplicationInterface
     use LoggerAwareTrait;
 
     protected ?Encryptor $encryptor = null;
+
     protected ?ServerInterface $server = null;
+
     protected ?AccountInterface $account = null;
-    protected ?AccessTokenInterface $accessToken = null;
+
+    protected AccessTokenInterface|RefreshableAccessTokenInterface|null $accessToken = null;
+
     protected ?JsApiTicket $ticket = null;
+
     protected ?\Closure $oauthFactory = null;
 
     public function getAccount(): AccountInterface
     {
-        if (!$this->account) {
+        if (! $this->account) {
             $this->account = new Account(
                 appId: (string) $this->config->get('app_id'), /** @phpstan-ignore-line */
                 secret: (string) $this->config->get('secret'), /** @phpstan-ignore-line */
@@ -73,7 +79,7 @@ class Application implements ApplicationInterface
      */
     public function getEncryptor(): Encryptor
     {
-        if (!$this->encryptor) {
+        if (! $this->encryptor) {
             $token = $this->getAccount()->getToken();
             $aesKey = $this->getAccount()->getAesKey();
 
@@ -106,7 +112,7 @@ class Application implements ApplicationInterface
      */
     public function getServer(): Server|ServerInterface
     {
-        if (!$this->server) {
+        if (! $this->server) {
             $this->server = new Server(
                 request: $this->getRequest(),
                 encryptor: $this->getAccount()->getAesKey() ? $this->getEncryptor() : null
@@ -123,9 +129,9 @@ class Application implements ApplicationInterface
         return $this;
     }
 
-    public function getAccessToken(): AccessTokenInterface
+    public function getAccessToken(): AccessTokenInterface|RefreshableAccessTokenInterface
     {
-        if (!$this->accessToken) {
+        if (! $this->accessToken) {
             $this->accessToken = new AccessToken(
                 appId: $this->getAccount()->getAppId(),
                 secret: $this->getAccount()->getSecret(),
@@ -137,7 +143,7 @@ class Application implements ApplicationInterface
         return $this->accessToken;
     }
 
-    public function setAccessToken(AccessTokenInterface $accessToken): static
+    public function setAccessToken(AccessTokenInterface|RefreshableAccessTokenInterface $accessToken): static
     {
         $this->accessToken = $accessToken;
 
@@ -156,7 +162,7 @@ class Application implements ApplicationInterface
      */
     public function getOAuth(): SocialiteProviderInterface
     {
-        if (!$this->oauthFactory) {
+        if (! $this->oauthFactory) {
             $this->oauthFactory = fn (self $app): SocialiteProviderInterface => (new WeChat(
                 [
                     'client_id' => $this->getAccount()->getAppId(),
@@ -168,7 +174,7 @@ class Application implements ApplicationInterface
 
         $provider = call_user_func($this->oauthFactory, $this);
 
-        if (!$provider instanceof SocialiteProviderInterface) {
+        if (! $provider instanceof SocialiteProviderInterface) {
             throw new InvalidArgumentException(sprintf(
                 'The factory must return a %s instance.',
                 SocialiteProviderInterface::class
@@ -180,7 +186,7 @@ class Application implements ApplicationInterface
 
     public function getTicket(): JsApiTicket
     {
-        if (!$this->ticket) {
+        if (! $this->ticket) {
             $this->ticket = new JsApiTicket(
                 appId: $this->getAccount()->getAppId(),
                 secret: $this->getAccount()->getSecret(),
@@ -209,7 +215,7 @@ class Application implements ApplicationInterface
     {
         $httpClient = $this->getHttpClient();
 
-        if (!!$this->config->get('http.retry', false)) {
+        if ((bool) $this->config->get('http.retry', false)) {
             $httpClient = new RetryableHttpClient(
                 $httpClient,
                 $this->getRetryStrategy(),
@@ -220,8 +226,8 @@ class Application implements ApplicationInterface
         return (new AccessTokenAwareClient(
             client: $httpClient,
             accessToken: $this->getAccessToken(),
-            failureJudge: fn (Response $response) => !!($response->toArray()['errcode'] ?? 0),
-            throw: !!$this->config->get('http.throw', true),
+            failureJudge: fn (Response $response) => (bool) ($response->toArray()['errcode'] ?? 0),
+            throw: (bool) $this->config->get('http.throw', true),
         ))->setPresets($this->config->all());
     }
 
@@ -231,7 +237,7 @@ class Application implements ApplicationInterface
 
         return (new AccessTokenExpiredRetryStrategy($retryConfig))
             ->decideUsing(function (AsyncContext $context, ?string $responseContent): bool {
-                return !empty($responseContent)
+                return ! empty($responseContent)
                     && str_contains($responseContent, '42001')
                     && str_contains($responseContent, 'access_token expired');
             });

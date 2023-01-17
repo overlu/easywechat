@@ -2,13 +2,30 @@
 
 namespace EasyWeChat\Kernel\HttpClient;
 
+use function array_key_exists;
 use ArrayAccess;
+use function base64_encode;
 use Closure;
 use EasyWeChat\Kernel\Contracts\Arrayable;
 use EasyWeChat\Kernel\Contracts\Jsonable;
 use EasyWeChat\Kernel\Exceptions\BadMethodCallException;
 use EasyWeChat\Kernel\Exceptions\BadResponseException;
 use EasyWeChat\Kernel\Support\Xml;
+use function file_put_contents;
+use Http\Discovery\Exception\NotFoundException;
+use Http\Discovery\Psr17FactoryDiscovery;
+use function json_encode;
+use const JSON_UNESCAPED_UNICODE;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Psr\Http\Message\ResponseFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+use function sprintf;
+use function str_contains;
+use function str_starts_with;
+use function strtolower;
+use Symfony\Component\HttpClient\Response\MockResponse;
+use Symfony\Component\HttpClient\Response\StreamableInterface;
+use Symfony\Component\HttpClient\Response\StreamWrapper;
 use Symfony\Contracts\HttpClient\Exception\ClientExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\DecodingExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\RedirectionExceptionInterface;
@@ -16,21 +33,13 @@ use Symfony\Contracts\HttpClient\Exception\ServerExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\ResponseInterface;
 use Throwable;
-use function array_key_exists;
-use function base64_encode;
-use function file_put_contents;
-use function json_encode;
-use function sprintf;
-use function str_contains;
-use function str_starts_with;
-use function strtolower;
-use const JSON_UNESCAPED_UNICODE;
 
 /**
  * @implements \ArrayAccess<array-key, mixed>
+ *
  * @see \Symfony\Contracts\HttpClient\ResponseInterface
  */
-class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface
+class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface, StreamableInterface
 {
     public function __construct(
         protected ResponseInterface $response,
@@ -71,7 +80,7 @@ class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface
      */
     public function isSuccessful(): bool
     {
-        return !$this->isFailed();
+        return ! $this->isFailed();
     }
 
     /**
@@ -132,6 +141,106 @@ class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface
      * @throws ClientExceptionInterface
      * @throws BadResponseException
      */
+    public function toJson(?bool $throw = null): string|false
+    {
+        return json_encode($this->toArray($throw), JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function toStream(?bool $throw = null)
+    {
+        if ($this->response instanceof StreamableInterface) {
+            return $this->response->toStream($throw ?? $this->throw);
+        }
+
+        if ($throw) {
+            throw new BadMethodCallException(sprintf('%s does\'t implements %s', \get_class($this->response), StreamableInterface::class));
+        }
+
+        return StreamWrapper::createResource(new MockResponse());
+    }
+
+    /**
+     * @throws TransportExceptionInterface
+     * @throws ServerExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws ClientExceptionInterface
+     */
+    public function toDataUrl(): string
+    {
+        return 'data:'.$this->getHeaderLine('content-type').';base64,'.base64_encode($this->getContent());
+    }
+
+    public function toPsrResponse(ResponseFactoryInterface $responseFactory = null, StreamFactoryInterface $streamFactory = null): \Psr\Http\Message\ResponseInterface
+    {
+        $streamFactory ??= $responseFactory instanceof StreamFactoryInterface ? $responseFactory : null;
+
+        if (null === $responseFactory || null === $streamFactory) {
+            if (! class_exists(Psr17Factory::class) && ! class_exists(Psr17FactoryDiscovery::class)) {
+                throw new \LogicException('You cannot use the "Symfony\Component\HttpClient\Psr18Client" as no PSR-17 factories have been provided. Try running "composer require nyholm/psr7".');
+            }
+
+            try {
+                $psr17Factory = class_exists(Psr17Factory::class, false) ? new Psr17Factory() : null;
+                $responseFactory ??= $psr17Factory ?? Psr17FactoryDiscovery::findResponseFactory(); /** @phpstan-ignore-line */
+                $streamFactory ??= $psr17Factory ?? Psr17FactoryDiscovery::findStreamFactory(); /** @phpstan-ignore-line */
+
+                /** @phpstan-ignore-next-line */
+            } catch (NotFoundException $e) {
+                throw new \LogicException('You cannot use the "Symfony\Component\HttpClient\HttplugClient" as no PSR-17 factories have been found. Try running "composer require nyholm/psr7".', 0, $e);
+            }
+        }
+
+        $psrResponse = $responseFactory->createResponse($this->getStatusCode());
+
+        foreach ($this->getHeaders(false) as $name => $values) {
+            foreach ($values as $value) {
+                $psrResponse = $psrResponse->withAddedHeader($name, $value);
+            }
+        }
+
+        $body = $this->response instanceof StreamableInterface ? $this->toStream(false) : StreamWrapper::createResource($this->response);
+        $body = $streamFactory->createStreamFromResource($body);
+
+        if ($body->isSeekable()) {
+            $body->seek(0);
+        }
+
+        return $psrResponse->withBody($body);
+    }
+
+    /**
+     * @throws ClientExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws ServerExceptionInterface
+     * @throws TransportExceptionInterface
+     * @throws BadResponseException
+     */
+    public function saveAs(string $filename): string
+    {
+        try {
+            file_put_contents($filename, $this->response->getContent(true));
+        } catch (Throwable $e) {
+            throw new BadResponseException(sprintf(
+                'Cannot save response to %s: %s',
+                $filename,
+                $this->response->getContent(false)
+            ), $e->getCode(), $e);
+        }
+
+        return '';
+    }
+
+    /**
+     * @throws TransportExceptionInterface
+     * @throws ServerExceptionInterface
+     * @throws RedirectionExceptionInterface
+     * @throws DecodingExceptionInterface
+     * @throws ClientExceptionInterface
+     * @throws BadResponseException
+     */
     public function offsetExists(mixed $offset): bool
     {
         return array_key_exists($offset, $this->toArray());
@@ -164,19 +273,6 @@ class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface
     public function offsetUnset(mixed $offset): void
     {
         throw new BadMethodCallException('Response is immutable.');
-    }
-
-    /**
-     * @throws TransportExceptionInterface
-     * @throws ServerExceptionInterface
-     * @throws RedirectionExceptionInterface
-     * @throws DecodingExceptionInterface
-     * @throws ClientExceptionInterface
-     * @throws BadResponseException
-     */
-    public function toJson(?bool $throw = null): string|false
-    {
-        return json_encode($this->toArray($throw), JSON_UNESCAPED_UNICODE);
     }
 
     /**
@@ -238,6 +334,7 @@ class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface
 
     /**
      * @return array<array-key, mixed>
+     *
      * @throws TransportExceptionInterface
      * @throws ServerExceptionInterface
      * @throws RedirectionExceptionInterface
@@ -263,39 +360,6 @@ class Response implements Jsonable, Arrayable, ArrayAccess, ResponseInterface
         $throw ??= $this->throw;
 
         return $this->hasHeader($name, $throw) ? implode(',', $this->getHeader($name, $throw)) : '';
-    }
-
-    /**
-     * @throws ClientExceptionInterface
-     * @throws RedirectionExceptionInterface
-     * @throws ServerExceptionInterface
-     * @throws TransportExceptionInterface
-     * @throws BadResponseException
-     */
-    public function saveAs(string $filename): string
-    {
-        try {
-            file_put_contents($filename, $this->response->getContent(true));
-        } catch (Throwable $e) {
-            throw new BadResponseException(sprintf(
-                'Cannot save response to %s: %s',
-                $filename,
-                $this->response->getContent(false)
-            ), $e->getCode(), $e);
-        }
-
-        return '';
-    }
-
-    /**
-     * @throws TransportExceptionInterface
-     * @throws ServerExceptionInterface
-     * @throws RedirectionExceptionInterface
-     * @throws ClientExceptionInterface
-     */
-    public function toDataUrl(): string
-    {
-        return 'data:'.$this->getHeaderLine('content-type').';base64,'.base64_encode($this->getContent());
     }
 
     /**

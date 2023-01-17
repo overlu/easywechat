@@ -1,5 +1,6 @@
 > 👋🏼 您当前浏览的文档为 6.x，其它版本的文档请参考：[5.x](/5.x/)、[4.x](/4.x/)、[3.x](/3.x/)
 
+
 # EasyWeChat
 
 EasyWeChat 是一个开源的 [微信](http://www.wechat.com) 非官方 SDK。安装非常简单，因为它是一个标准的 [Composer](https://getcomposer.org/) 包，这意味着任何满足下列安装条件的 PHP 项目支持 Composer 都可以使用它。
@@ -14,8 +15,13 @@ EasyWeChat 是一个开源的 [微信](http://www.wechat.com) 非官方 SDK。�
 
 ## 安装
 
+::: warning
+阿里云的 Composer 源已经停止维护，请停止使用，或更换官方源，或者[腾讯软件源](https://mirrors.tencent.com/help/composer.html)
+:::
+
+
 ```shell
-composer require w7corp/easywechat
+composer require w7corp/easywechat:^6.7
 ```
 
 ## 使用

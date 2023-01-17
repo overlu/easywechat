@@ -97,16 +97,29 @@ class RequestUtilTest extends TestCase
         $this->assertArrayHasKey('body', $formatted);
         $this->assertSame('true', $formatted['body']['overtrue']);
         $this->assertSame('world', $formatted['body']['hello']);
+
+        // POST with `query`
+        $options = ['overtrue' => 'true', 'hello' => 'world', '"query"' => 'id=1'];
+        $formatted = RequestUtil::formatOptions($options, 'POST');
+
+        $this->assertArrayNotHasKey('overtrue', $formatted);
+        $this->assertArrayNotHasKey('hello', $formatted);
+        $this->assertArrayHasKey('body', $formatted);
+        $this->assertArrayNotHasKey('query', $formatted);
+        $this->assertArrayHasKey('query', $formatted['body']);
+        $this->assertSame('id=1', $formatted['body']['query']);
+        $this->assertSame('true', $formatted['body']['overtrue']);
+        $this->assertSame('world', $formatted['body']['hello']);
     }
 
     public function test_format_xml_body()
     {
         // xml string
-        $options = RequestUtil::formatBody(['xml' => '<xml><foo><![CDATA[bar]]></foo></xml>']);
+        $options = RequestUtil::formatBody(['xml' => '<xml><foo>bar</foo></xml>']);
 
         $this->assertArrayNotHasKey('xml', $options);
         $this->assertArrayHasKey('body', $options);
-        $this->assertSame('<xml><foo><![CDATA[bar]]></foo></xml>', $options['body']);
+        $this->assertSame('<xml><foo>bar</foo></xml>', $options['body']);
         $this->assertSame(['Content-Type: text/xml'], $options['headers']['Content-Type']);
 
         // xml array
@@ -114,7 +127,7 @@ class RequestUtilTest extends TestCase
 
         $this->assertArrayNotHasKey('xml', $options);
         $this->assertArrayHasKey('body', $options);
-        $this->assertSame('<xml><foo><![CDATA[bar]]></foo></xml>', $options['body']);
+        $this->assertSame('<xml><foo>bar</foo></xml>', $options['body']);
         $this->assertSame(['Content-Type: text/xml'], $options['headers']['Content-Type']);
 
         // invalid xml
