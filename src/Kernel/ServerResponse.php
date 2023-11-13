@@ -2,17 +2,19 @@
 
 namespace EasyWeChat\Kernel;
 
+use const PHP_OUTPUT_HANDLER_CLEANABLE;
+use const PHP_OUTPUT_HANDLER_FLUSHABLE;
+use const PHP_OUTPUT_HANDLER_REMOVABLE;
+
+use JetBrains\PhpStorm\Pure;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamInterface;
+
 use function array_keys;
 use function array_map;
 use function count;
 use function header;
-use JetBrains\PhpStorm\Pure;
 use function max;
-use const PHP_OUTPUT_HANDLER_CLEANABLE;
-use const PHP_OUTPUT_HANDLER_FLUSHABLE;
-use const PHP_OUTPUT_HANDLER_REMOVABLE;
-use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\StreamInterface;
 use function sprintf;
 use function ucwords;
 
@@ -166,6 +168,7 @@ class ServerResponse implements ResponseInterface
      * Resulting level can be greater than target level if a non-removable buffer has been encountered.
      *
      * @link https://github.com/symfony/http-foundation/blob/6.1/Response.php
+     *
      * @final
      */
     public static function closeOutputBuffers(int $targetLevel, bool $flush): void
@@ -186,16 +189,18 @@ class ServerResponse implements ResponseInterface
     public function __toString(): string
     {
         $headers = $this->getHeaders();
-
-        ksort($headers);
-
-        $max = max(array_map('strlen', array_keys($headers))) + 1;
         $headersString = '';
 
-        foreach ($headers as $name => $values) {
-            $name = ucwords($name, '-');
-            foreach ($values as $value) {
-                $headersString .= sprintf("%-{$max}s %s\r\n", $name.':', $value);
+        if (! empty($headers)) {
+            ksort($headers);
+
+            $max = max(array_map('strlen', array_keys($headers))) + 1;
+
+            foreach ($headers as $name => $values) {
+                $name = ucwords($name, '-');
+                foreach ($values as $value) {
+                    $headersString .= sprintf("%-{$max}s %s\r\n", $name.':', $value);
+                }
             }
         }
 

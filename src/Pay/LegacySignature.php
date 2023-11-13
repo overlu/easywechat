@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace EasyWeChat\Pay;
 
-use function call_user_func_array;
 use EasyWeChat\Kernel\Exceptions\InvalidConfigException;
 use EasyWeChat\Kernel\Exceptions\RuntimeException;
 use EasyWeChat\Kernel\Support\Str;
 use EasyWeChat\Pay\Contracts\Merchant as MerchantInterface;
+
+use function call_user_func_array;
 use function hash_hmac;
 use function http_build_query;
 use function is_string;
@@ -55,6 +56,8 @@ class LegacySignature
         } else {
             $signType = 'md5';
         }
+
+        unset($params['sign_type']);
 
         $sign = call_user_func_array($signType, [urldecode(http_build_query($attributes))]);
 

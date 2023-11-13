@@ -2,16 +2,18 @@
 
 namespace EasyWeChat\Kernel\Traits;
 
-use function array_merge;
 use EasyWeChat\Kernel\Encryptor;
 use EasyWeChat\Kernel\Exceptions\InvalidArgumentException;
 use EasyWeChat\Kernel\Exceptions\RuntimeException;
 use EasyWeChat\Kernel\Message;
 use EasyWeChat\Kernel\Support\Xml;
-use function is_array;
-use function is_callable;
 use Nyholm\Psr7\Response;
 use Psr\Http\Message\ResponseInterface;
+
+use function array_merge;
+use function is_array;
+use function is_callable;
+use function is_string;
 use function time;
 
 trait RespondXmlMessage
@@ -20,7 +22,7 @@ trait RespondXmlMessage
      * @throws RuntimeException
      * @throws InvalidArgumentException
      */
-    public function transformToReply(mixed $response, Message $message, ?Encryptor $encryptor = null): ResponseInterface
+    public function transformToReply(mixed $response, Message $message, Encryptor $encryptor = null): ResponseInterface
     {
         if (empty($response)) {
             return new Response(200, [], 'success');
@@ -48,7 +50,7 @@ trait RespondXmlMessage
      */
     protected function normalizeResponse(mixed $response): array
     {
-        if (is_callable($response)) {
+        if (! is_string($response) && is_callable($response)) {
             $response = $response();
         }
 
@@ -77,7 +79,7 @@ trait RespondXmlMessage
      *
      * @throws RuntimeException
      */
-    protected function createXmlResponse(array $attributes, ?Encryptor $encryptor = null): ResponseInterface
+    protected function createXmlResponse(array $attributes, Encryptor $encryptor = null): ResponseInterface
     {
         $xml = Xml::build($attributes);
 

@@ -9,6 +9,7 @@ use EasyWeChat\Kernel\Contracts\Config as ConfigInterface;
 use EasyWeChat\Kernel\Exceptions\InvalidArgumentException;
 use EasyWeChat\Kernel\Support\Arr;
 use JetBrains\PhpStorm\Pure;
+
 use function strval;
 
 /**
@@ -71,10 +72,6 @@ class Config implements ArrayAccess, ConfigInterface
         return $config;
     }
 
-    /**
-     * @param  string  $key
-     * @param  mixed|null  $value
-     */
     public function set(string $key, mixed $value = null): void
     {
         Arr::set($this->items, $key, $value);
